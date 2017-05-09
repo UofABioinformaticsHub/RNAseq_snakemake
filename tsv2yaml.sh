@@ -46,7 +46,7 @@ picard: '.../picard.jar'
 kallisto: '.../kallisto'
 
 ## Adapter removal
-basename: 'Lardelli'
+basename: '...'
 minquality_AR: 10
 minlength_AR: 25
 AR_threads: 1
