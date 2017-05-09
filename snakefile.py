@@ -22,7 +22,7 @@
 ##---------------------------------------------------------------------------##
 # To run snakemake pipeline:
 # Runs on python 3
-# snakemake -j 2 --core 10 -s snakefile_Lardelli_2017.py
+# snakemake -j 2 --core 10 -s snakefile.py
     # snakemake - specifying the snakemake executable
     # -j - specifying how many jobs to run in parallel
     # --core - specifying the number of cores to use (note: -j * --core)
@@ -52,7 +52,7 @@ import glob
 
 ## Configuration file
 # Include path if not in snakefile directory
-configfile: 'config_Lardelli_v2.yaml'
+configfile: 'config.yaml'
 
 ##----------------------------------------------------------------------------##
 ## 0. Targets for analysis                                                    ##
