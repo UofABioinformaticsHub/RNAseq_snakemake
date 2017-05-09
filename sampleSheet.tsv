@@ -1,0 +1,17 @@
+###################################################
+############# REMOVE THIS TEXT BLOCK  #############
+###################################################
+#												  #
+# This file is tab separated. The headings below  #
+# are the 8 columns that are required for the 	  #
+# snake file to run. The column number and names  #
+# can be changed to be more specific to your      #
+# analysis, just be sure to adapt the        	  #
+# tsv2yaml.sh script and snakefile accordingly.   #
+#												  #
+###################################################
+############# REMOVE THIS TEXT BLOCK  #############
+###################################################
+
+SampleID	Platform	Replicate	TreatmentGroup	Index	SuffixType	R1_FilePath	R2_FilePath
+A	B	C	D	E	F	G	H
