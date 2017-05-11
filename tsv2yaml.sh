@@ -13,6 +13,7 @@
 sed 1d $1 > tmp.tsv
 
 # replace all instances of '...' with a filepath/directory structure
+# Select the BAM key corresponding to the aligner to be used
 # Change "config...(dot)yaml" to whatever you want to call it
 cat > config.yaml <<__SCRIPT__
 ## Directory paths
@@ -20,7 +21,8 @@ BASE: '/path/to/desired/output/destination'
 QC_raw: '/0_FastQC_raw'
 QC_trim: '/0_FastQC_trim'
 TRIM: '/1_AdapterRemoval'
-BAMS: '/2_Hisat2_sambamba_merged'
+# BAMS: '/2_Hisat2_sambamba_merged'
+# BAMS: '/2_STAR_sambamba'
 unmapped: '/unmappedReads'
 BAMS_RG: '/2_bams_read_group'
 QUANT_SAL: '/3_salmon'
@@ -55,17 +57,22 @@ DISCARD: '/AdapterRemoval/excessReads'
 ## Fastqc - parameters apply to both raw and trimmed fastq files
 format: 'fastq'
 kmer: 9
-FQC_threads: 10
+FQC_threads: 1
 
 ## Salmon quantifiation
      # INDEX_DIR - change the file path to where the index will be built (e.g. in QUANT_SAL)
 INDEX_DIR: '.../Index'
 bootstrap: 100
-SAL_threads: 10
+SAL_threads: 1
 
 ## hisat2_sambamba
 quality: 30
 H2_threads: 1
+
+## STAR aligner
+genomeDir: '/data/biohub/Refs/zebrafish/STAR_index'
+compress: 5
+ST_threads: 1
 
 ## FeatureCounts
 minquality_FC: 10
