@@ -43,7 +43,7 @@ The `-s` argument is used to specify a snakefile. If the snakefile is in the dir
 
 A dry run tests whether the rules in the snakefile have been defined correctly, without generating any output. Dry runs can be executed with the `-n` argument:
 
-```snakemake -s snakefile -n
+```snakemake -s snakefile -n```
 
 If there are errors in the snakefile, whether it's a typo in the code, missing input files or undefined variables, a dry run will provide a detailed message of what went wrong and on what line.
 
