@@ -6,14 +6,14 @@
 ##---------------------------------------------------------------------------##
 
 ##---------------------------------------------------------------------------##
-# This is an RNA-seq analysis snakefile script for use within the Adelaide 
-# University Bioinformatics hub. The snakefile is adapted from Dr. Jimmy 
-# Breen's bash script found at the following address: 
-# github.com/jimmybgammyknee/gammytools/blob/master/RRI_RNAseq_pipeline.sh. 
+# This is an RNA-seq analysis snakefile script for use within the Adelaide
+# University Bioinformatics hub. The snakefile is adapted from Dr. Jimmy
+# Breen's bash script found at the following address:
+# github.com/jimmybgammyknee/gammytools/blob/master/RRI_RNAseq_pipeline.sh.
 ##---------------------------------------------------------------------------##
 
 ##---------------------------------------------------------------------------##
-# Adaptations to the samplesheet column names and the tsv2yaml.sh will result 
+# Adaptations to the samplesheet column names and the tsv2yaml.sh will result
 # in discrepancies between the master snakefile and config.yaml file. Be sure
 # to check that the `config["..."]` commands throughout the snakefile match
 # the adaptations that have been made.
@@ -26,9 +26,18 @@
     # snakemake - specifying the snakemake executable
     # -j - specifying how many jobs to run in parallel
     # --core - specifying the number of cores to use (note: -j * --core)
-    # -s - snakefile 
-# Run specific rule: include -R followed by rule name 
+    # -s - snakefile
+# Run specific rule: include -R followed by rule name
 ##---------------------------------------------------------------------------##
+
+##---------------------------------------------------------------------------##
+# Development:
+    # STAR:
+        # Untested
+    # READGROUP:
+        # Not working, in development.
+##---------------------------------------------------------------------------##
+
 
 ##---------------------------------------------------------------------------##
 # Pipeline ToC:
@@ -37,8 +46,9 @@
 # PART2: QC raw
 # PART3: QC trimmed
 # PART4: Hisat2/Sambamba
-# PART5: Quantification Salmon
-# PART6: Generating readgroups
+# PART4.5: STAR/Sambamba
+# PART5: Generating readgroups
+# PART6: Quantification Salmon
 # PART7: FeatureCounts
 # PART8: Stringtie assembly/initial file formation
 # PART8.5 Stringtie making merged.transcripts.gtf
@@ -75,8 +85,13 @@ STRING_mergeTranscript = config["ASS"] + "/merged.transcript.gtf"
 ## Specify targets
 rule all:
     input:
+<<<<<<< HEAD
         QUANT_feat + QUANT_salmon #QC_trim + QC_raw +
 
+=======
+        QC_trim + QC_raw + QUANT_feat + QUANT_salmon + KAL + STRING_ass + STRING_geneAbund + STRING_covRefs, STRING_merge, STRING_mergeTranscript
+        #  RG
+>>>>>>> 5b6a267cea71fb09bb289c6c3a54ea3b7b8daec7
 
 ##--------------------------------------##
 ## 1. Adapter removal                   ##
@@ -191,17 +206,18 @@ rule hisat2_sambamba:
 
 
 ##--------------------------------------##
-## 5. Quantification - Salmon           ##
+## 4.5. Alignment                         ##
 ##--------------------------------------##
 
-rule quant_salmon:
+rule starAlignment:
     input:
         R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
-        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz",
-        Tran = config["TRAN"]
+        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz"
     output:
-        out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
+        B1 = temp(config["BASE"] + config["BAMS"] + '/{samples}_temp.bam'),
+        B2 = config["BASE"] + config["BAMS"] + '/{samples}.bam'
     params:
+<<<<<<< HEAD
         salmon = config["salmon"],
         index = config["INDEX_DIR"],
         bootstrap = config["bootstrap"],
@@ -216,12 +232,32 @@ rule quant_salmon:
         """
         {params.salmon} quant -l A -i {params.index} -p {threads} -1 {input.R1} -2 {input.R2} \
         	--numBootstraps {params.bootstrap} -o {params.out} 2> {log}
+=======
+        sambamba = config["sambamba"],
+        genomeDir = config["genomeDir"],
+        compress = config["compress"]
+    threads: config["ST_threads"]
+    message: 'STAR: Alignment of trimmed reads'
+    log: config["BASE"] + config["LOG"] + '/STAR/{samples}.log'
+    shell:
+        """
+        module load STAR/2.5.1a-foss-2015b
+
+        (STAR --runThreadN {threads} \
+                --genomeDir {params.genomeDir} \
+                --readFilesIn {input.R1} {input.R2} \
+                --readFilesCommand gunzip -c \
+                --outSAMtype BAM Unsorted \
+                --outBAMcompression {params.compress} | \
+                samtools view -bhS -q{params.qual} - 1> {output.B1}) 2> {log}
+        {params.sambamba} sort -p -t {threads} -o {output.B2} {output.B1}
+>>>>>>> 5b6a267cea71fb09bb289c6c3a54ea3b7b8daec7
         """
 
 #({params.salmon} index -p {threads} -i {params.index_out} -t {input.Tran} --gencode --perfectHash
 
 ##--------------------------------------##
-## 6. ReadGroup - bam headers         ##
+## 5. ReadGroup - bam headers         ##
 ##--------------------------------------##
 
 rule read_group:
@@ -248,6 +284,36 @@ rule read_group:
     shell:
         """
         java -jar {params.picard} AddOrReplaceReadGroups I={input} O={output} RGID={params.RGID} RGLB={params.RGLB} RGPL={params.RGPU} RGPU={params.RGPU} RGSM={params.RGSM}
+        """
+
+
+##--------------------------------------##
+## 6. Quantification - Salmon           ##
+##--------------------------------------##
+
+rule quant_salmon:
+    input:
+        R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
+        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz",
+        Tran = config["TRAN"]
+    output:
+        out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
+    params:
+        salmon = config["salmon"],
+        index_out = config["INDEX_DIR"],
+        bootstrap = config["bootstrap"],
+        out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
+    threads: config["SAL_threads"]
+    message:
+        "Salmon - Quantification of transcripts"
+    log:
+        config["BASE"] + config["LOG"] + config["QUANT_SAL"] + "/{samples}.log"
+
+    shell:
+        """
+        ({params.salmon} index -p {threads} -i {params.index_out} -t {input.Tran} --gencode --perfectHash
+        {params.salmon} quant -l A -i {params.index_out} -p {threads} -1 {input.R1} -2 {input.R2}
+        --numBootstraps {params.bootstrap} -o {params.out}) 2> {log}
         """
 
 
