@@ -22,7 +22,7 @@
 ##---------------------------------------------------------------------------##
 # To run snakemake pipeline:
 # Runs on python 3
-# snakemake -j 2 --core 10 -s snakefile_Lardelli_2017.py
+# snakemake -j 2 --core 10 -s snakefile.py
     # snakemake - specifying the snakemake executable
     # -j - specifying how many jobs to run in parallel
     # --core - specifying the number of cores to use (note: -j * --core)
@@ -52,7 +52,7 @@ import glob
 
 ## Configuration file
 # Include path if not in snakefile directory
-configfile: 'config_Lardelli_v2.yaml'
+configfile: 'config.yaml'
 
 ##----------------------------------------------------------------------------##
 ## 0. Targets for analysis                                                    ##
@@ -75,7 +75,7 @@ STRING_mergeTranscript = config["ASS"] + "/merged.transcript.gtf"
 ## Specify targets
 rule all:
     input:
-        QC_trim + QC_raw + RG + QUANT_feat + QUANT_salmon + KAL + STRING_ass + STRING_geneAbund + STRING_covRefs, STRING_merge, STRING_mergeTranscript
+        QUANT_feat + QUANT_salmon #QC_trim + QC_raw +
 
 
 ##--------------------------------------##
@@ -169,6 +169,7 @@ rule hisat2_sambamba:
         unmapped = config["BASE"] + config["BAMS"] + config["unmapped"] + '/{samples}_unmapped.fastq',
         B1 = temp(config["BASE"] + config["BAMS"] + '/{samples}_temp.bam'),
         B2 = config["BASE"] + config["BAMS"] + '/{samples}.bam'
+	B3 = config["BASE"] + config["BAMS"] + '/{samples}.nodup.bam'
     params:
         hisat2 = config["hisat2"],
         sambamba = config["sambamba"],
@@ -183,8 +184,9 @@ rule hisat2_sambamba:
     shell:
         """
         ({params.hisat2} -p {threads} -x {params.idx} --un-gz {output.unmapped} -1 {input.R1} -2 {input.R2} | \
-        samtools view -bhS -q{params.qual} - 1> {output.B1}) 2> {log}
+        	samtools view -bhS -q{params.qual} - 1> {output.B1}) 2> {log}
         {params.sambamba} sort -p -t {threads} -o {output.B2} {output.B1}
+	{params.sambamba} markdup -p -r -t {threads} {output.B2} {output.B3}
         """
 
 
@@ -201,7 +203,7 @@ rule quant_salmon:
         out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
     params:
         salmon = config["salmon"],
-        index_out = config["INDEX_DIR"],
+        index = config["INDEX_DIR"],
         bootstrap = config["bootstrap"],
         out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
     threads: config["SAL_threads"]
@@ -212,11 +214,11 @@ rule quant_salmon:
 
     shell:
         """
-        ({params.salmon} index -p {threads} -i {params.index_out} -t {input.Tran} --gencode --perfectHash
-        {params.salmon} quant -l A -i {params.index_out} -p {threads} -1 {input.R1} -2 {input.R2}
-        --numBootstraps {params.bootstrap} -o {params.out}) 2> {log}
+        {params.salmon} quant -l A -i {params.index} -p {threads} -1 {input.R1} -2 {input.R2} \
+        	--numBootstraps {params.bootstrap} -o {params.out} 2> {log}
         """
 
+#({params.salmon} index -p {threads} -i {params.index_out} -t {input.Tran} --gencode --perfectHash
 
 ##--------------------------------------##
 ## 6. ReadGroup - bam headers         ##
