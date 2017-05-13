@@ -85,8 +85,13 @@ STRING_mergeTranscript = config["ASS"] + "/merged.transcript.gtf"
 ## Specify targets
 rule all:
     input:
+<<<<<<< HEAD
+        QUANT_feat + QUANT_salmon #QC_trim + QC_raw +
+
+=======
         QC_trim + QC_raw + QUANT_feat + QUANT_salmon + KAL + STRING_ass + STRING_geneAbund + STRING_covRefs, STRING_merge, STRING_mergeTranscript
         #  RG
+>>>>>>> 5b6a267cea71fb09bb289c6c3a54ea3b7b8daec7
 
 ##--------------------------------------##
 ## 1. Adapter removal                   ##
@@ -179,6 +184,7 @@ rule hisat2_sambamba:
         unmapped = config["BASE"] + config["BAMS"] + config["unmapped"] + '/{samples}_unmapped.fastq',
         B1 = temp(config["BASE"] + config["BAMS"] + '/{samples}_temp.bam'),
         B2 = config["BASE"] + config["BAMS"] + '/{samples}.bam'
+	B3 = config["BASE"] + config["BAMS"] + '/{samples}.nodup.bam'
     params:
         hisat2 = config["hisat2"],
         sambamba = config["sambamba"],
@@ -193,8 +199,9 @@ rule hisat2_sambamba:
     shell:
         """
         ({params.hisat2} -p {threads} -x {params.idx} --un-gz {output.unmapped} -1 {input.R1} -2 {input.R2} | \
-        samtools view -bhS -q{params.qual} - 1> {output.B1}) 2> {log}
+        	samtools view -bhS -q{params.qual} - 1> {output.B1}) 2> {log}
         {params.sambamba} sort -p -t {threads} -o {output.B2} {output.B1}
+	{params.sambamba} markdup -p -r -t {threads} {output.B2} {output.B3}
         """
 
 
@@ -210,6 +217,22 @@ rule starAlignment:
         B1 = temp(config["BASE"] + config["BAMS"] + '/{samples}_temp.bam'),
         B2 = config["BASE"] + config["BAMS"] + '/{samples}.bam'
     params:
+<<<<<<< HEAD
+        salmon = config["salmon"],
+        index = config["INDEX_DIR"],
+        bootstrap = config["bootstrap"],
+        out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
+    threads: config["SAL_threads"]
+    message:
+        "Salmon - Quantification of transcripts"
+    log:
+        config["BASE"] + config["LOG"] + config["QUANT_SAL"] + "/{samples}.log"
+
+    shell:
+        """
+        {params.salmon} quant -l A -i {params.index} -p {threads} -1 {input.R1} -2 {input.R2} \
+        	--numBootstraps {params.bootstrap} -o {params.out} 2> {log}
+=======
         sambamba = config["sambamba"],
         genomeDir = config["genomeDir"],
         compress = config["compress"]
@@ -228,8 +251,10 @@ rule starAlignment:
                 --outBAMcompression {params.compress} | \
                 samtools view -bhS -q{params.qual} - 1> {output.B1}) 2> {log}
         {params.sambamba} sort -p -t {threads} -o {output.B2} {output.B1}
+>>>>>>> 5b6a267cea71fb09bb289c6c3a54ea3b7b8daec7
         """
 
+#({params.salmon} index -p {threads} -i {params.index_out} -t {input.Tran} --gencode --perfectHash
 
 ##--------------------------------------##
 ## 5. ReadGroup - bam headers         ##
