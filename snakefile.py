@@ -86,8 +86,9 @@ STRING_mergeTranscript = config["BASE"] + config["ASS"] + "/merged.transcript.gt
 ## Specify targets
 rule all:
     input:
-         QC_trim + QC_raw + QUANT_feat + QUANT_salmon + KAL + STRING_ass + STRING_geneAbund + STRING_covRefs, SAL_index, STRING_merge, STRING_mergeTranscript
+         QC_trim + QC_raw + QUANT_feat + QUANT_salmon + KAL + STRING_ass + STRING_geneAbund + STRING_covRefs, STRING_merge, STRING_mergeTranscript, SAL_index
          ## Work in progress - RG
+
 
 ##--------------------------------------##
 ## 1. Adapter removal                   ##
@@ -295,12 +296,12 @@ rule salmon_index:
 rule quant_salmon:
     input:
         R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
-        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz"
+        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz",
+        index_in = rules.salmon_index.output
     output:
         out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
     params:
         salmon = config["salmon"],
-        index_in = config["INDEX_DIR"],
         bootstrap = config["bootstrap"],
         out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
     threads: config["SAL_threads"]
@@ -311,7 +312,7 @@ rule quant_salmon:
 
     shell:
         """
-        ({params.salmon} quant -l A -i {params.index_in} -p {threads} -1 {input.R1} -2 {input.R2} --numBootstraps {params.bootstrap} -o {params.out}) 2> {log}
+        ({params.salmon} quant -l A -i {input.index_in} -p {threads} -1 {input.R1} -2 {input.R2} --numBootstraps {params.bootstrap} -o {params.out}) 2> {log}
         """
 
 
