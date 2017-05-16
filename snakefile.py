@@ -48,6 +48,7 @@
 # PART4: Hisat2/Sambamba
 # PART4.5: STAR/Sambamba
 # PART5: Generating readgroups
+# PART6: Salmon index
 # PART6: Quantification Salmon
 # PART7: FeatureCounts
 # PART8: Stringtie assembly/initial file formation
@@ -72,21 +73,32 @@ configfile: 'config.yaml'
 QC_raw = expand(config["BASE"] + config["QC_raw"] + '/{samples}_fastQC/', samples=config["SampleList"])
 QC_trim = expand(config["BASE"] + config["QC_trim"] + '/{samples}_fastQC/', samples=config["SampleList"])
 QUANT_feat = expand(config["BASE"] + config["QUANT_FC"] + '/project_genes_{samples}.txt', samples=config["SampleList"])
+SAL_index = config["INDEX_DIR"]
 QUANT_salmon = expand(config["BASE"] + config["QUANT_SAL"] + "/{samples}/", samples=config["SampleList"])
 KAL = expand(config["BASE"] + config["KAL"] + "/{samples}_kalOut", samples=config["SampleList"])
-RG = expand(config["BAMS_RG"] + "/{samples}.bam", samples=config["SampleList"])
-STRING_ass = expand(config["ASS"] + '/{samples}_assembly.gtf', samples=config["SampleList"])
-STRING_geneAbund = expand(config["ASS"] + '/{samples}_gene_abund.tab', samples=config["SampleList"])
-STRING_covRefs = expand(config["ASS"] + '/{samples}_cov_refs.gtf', samples=config["SampleList"])
-STRING_merge = config["ASS"] + '/merged.gtf'
-STRING_mergeTranscript = config["ASS"] + "/merged.transcript.gtf"
-
+# RG = expand(config["BAMS_RG"] + "/{samples}.bam", samples=config["SampleList"])
+STRING_ass = expand(config["BASE"] + config["ASS"] + '/{samples}_assembly.gtf', samples=config["SampleList"])
+STRING_geneAbund = expand(config["BASE"] + config["ASS"] + '/{samples}_gene_abund.tab', samples=config["SampleList"])
+STRING_covRefs = expand(config["BASE"] + config["ASS"] + '/{samples}_cov_refs.gtf', samples=config["SampleList"])
+STRING_merge = config["BASE"] + config["ASS"] + '/merged.gtf',
+STRING_mergeTranscript = config["BASE"] + config["ASS"] + "/merged.transcript.gtf"
 
 ## Specify targets
 rule all:
     input:
-        QC_trim + QC_raw + QUANT_feat + QUANT_salmon + KAL + STRING_ass + STRING_geneAbund + STRING_covRefs, STRING_merge, STRING_mergeTranscript
-        #  RG
+         QC_trim +
+         QC_raw +
+         QUANT_feat +
+         QUANT_salmon +
+         KAL +
+         STRING_ass +
+         STRING_geneAbund +
+         STRING_covRefs,
+         STRING_merge,
+         STRING_mergeTranscript,
+         SAL_index
+         ## Work in progress - RG
+
 
 ##--------------------------------------##
 ## 1. Adapter removal                   ##
@@ -103,17 +115,24 @@ rule adpt_trimming:
         AdapterRemoval = config["AdapterRemoval"],
         min_qual = config["minquality_AR"],
         min_len = config["minlength_AR"],
-        name = lambda wildcards: config["basename"] + "_" + config["SampleList"][wildcards.samples]["Sample"]
+        name = lambda wildcards: config["basename"] + "_" + config["SampleList"][wildcards.samples]["Sample"],
+        excessReads = config["BASE"] + config["TRIM"] + config["DISCARD"]
     threads: config["AR_threads"]
     message:
         "AdapterRemoval - Trimming reads from fastq files"
 
     shell:
         """
+        mkdir -p {params.excessReads}
+
         {params.AdapterRemoval} --file1 {input.R1} --file2 {input.R2} \
         --output1 {output.R1} --output2 {output.R2} \
         --threads {threads} --gzip --basename {params.name} --trimqualities --trimns \
         --minquality {params.min_qual} --minlength {params.min_len}
+
+        mv *.truncated.gz {params.excessReads}
+		mv *.discarded.gz {params.excessReads}
+		mv *.settings {params.excessReads}
         """
 
 
@@ -202,33 +221,33 @@ rule hisat2_sambamba:
 ## 4.5. Alignment                         ##
 ##--------------------------------------##
 
-rule starAlignment:
-    input:
-        R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
-        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz"
-    output:
-        B1 = temp(config["BASE"] + config["BAMS"] + '/{samples}_temp.bam'),
-        B2 = config["BASE"] + config["BAMS"] + '/{samples}.bam'
-    params:
-        sambamba = config["sambamba"],
-        genomeDir = config["genomeDir"],
-        compress = config["compress"]
-    threads: config["ST_threads"]
-    message: 'STAR: Alignment of trimmed reads'
-    log: config["BASE"] + config["LOG"] + '/STAR/{samples}.log'
-    shell:
-        """
-        module load STAR/2.5.1a-foss-2015b
-
-        (STAR --runThreadN {threads} \
-                --genomeDir {params.genomeDir} \
-                --readFilesIn {input.R1} {input.R2} \
-                --readFilesCommand gunzip -c \
-                --outSAMtype BAM Unsorted \
-                --outBAMcompression {params.compress} | \
-                samtools view -bhS -q{params.qual} - 1> {output.B1}) 2> {log}
-        {params.sambamba} sort -p -t {threads} -o {output.B2} {output.B1}
-        """
+# rule starAlignment:
+#     input:
+#         R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
+#         R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz"
+#     output:
+#         B1 = temp(config["BASE"] + config["BAMS"] + '/{samples}_temp.bam'),
+#         B2 = config["BASE"] + config["BAMS"] + '/{samples}.bam'
+#     params:
+#         sambamba = config["sambamba"],
+#         genomeDir = config["genomeDir"],
+#         compress = config["compress"]
+#     threads: config["ST_threads"]
+#     message: 'STAR: Alignment of trimmed reads'
+#     log: config["BASE"] + config["LOG"] + '/STAR/{samples}.log'
+#     shell:
+#         """
+#         module load STAR/2.5.1a-foss-2015b
+#
+#         (STAR --runThreadN {threads} \
+#                 --genomeDir {params.genomeDir} \
+#                 --readFilesIn {input.R1} {input.R2} \
+#                 --readFilesCommand gunzip -c \
+#                 --outSAMtype BAM Unsorted \
+#                 --outBAMcompression {params.compress} | \
+#                 samtools view -bhS -q{params.qual} - 1> {output.B1}) 2> {log}
+#         {params.sambamba} sort -p -t {threads} -o {output.B2} {output.B1}
+#         """
 
 
 ##--------------------------------------##
@@ -261,21 +280,38 @@ rule read_group:
         java -jar {params.picard} AddOrReplaceReadGroups I={input} O={output} RGID={params.RGID} RGLB={params.RGLB} RGPL={params.RGPU} RGPU={params.RGPU} RGSM={params.RGSM}
         """
 
+##--------------------------------------##
+## 6. Quantification - Salmon Index     ##
+##--------------------------------------##
+
+rule salmon_index:
+    input:
+        Tran = config["TRAN"]
+    output:
+        index_out = config["INDEX_DIR"]
+    params:
+        salmon = config["salmon"],
+        index_out = config["INDEX_DIR"]
+    threads: 1
+    message: "Salmon - Generating index from transcripts file"
+    shell:
+        """
+        {params.salmon} index -p {threads} -i {params.index_out} -t {input.Tran} --gencode --perfectHash
+        """
 
 ##--------------------------------------##
 ## 6. Quantification - Salmon           ##
 ##--------------------------------------##
 
-rule quant_salmon:
+rule salmon_quant:
     input:
         R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
         R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz",
-        Tran = config["TRAN"]
+        index_in = rules.salmon_index.output
     output:
         out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
     params:
         salmon = config["salmon"],
-        index_out = config["INDEX_DIR"],
         bootstrap = config["bootstrap"],
         out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
     threads: config["SAL_threads"]
@@ -286,9 +322,7 @@ rule quant_salmon:
 
     shell:
         """
-        ({params.salmon} index -p {threads} -i {params.index_out} -t {input.Tran} --gencode --perfectHash
-        {params.salmon} quant -l A -i {params.index_out} -p {threads} -1 {input.R1} -2 {input.R2}
-        --numBootstraps {params.bootstrap} -o {params.out}) 2> {log}
+        ({params.salmon} quant -l A -i {input.index_in} -p {threads} -1 {input.R1} -2 {input.R2} --numBootstraps {params.bootstrap} -o {params.out}) 2> {log}
         """
 
 
