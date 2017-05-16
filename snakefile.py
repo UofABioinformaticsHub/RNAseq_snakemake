@@ -86,7 +86,17 @@ STRING_mergeTranscript = config["BASE"] + config["ASS"] + "/merged.transcript.gt
 ## Specify targets
 rule all:
     input:
-         QC_trim + QC_raw + QUANT_feat + QUANT_salmon + KAL + STRING_ass + STRING_geneAbund + STRING_covRefs, STRING_merge, STRING_mergeTranscript, SAL_index
+         QC_trim +
+         QC_raw +
+         QUANT_feat +
+         QUANT_salmon +
+         KAL +
+         STRING_ass +
+         STRING_geneAbund +
+         STRING_covRefs,
+         STRING_merge,
+         STRING_mergeTranscript,
+         SAL_index
          ## Work in progress - RG
 
 
@@ -293,7 +303,7 @@ rule salmon_index:
 ## 6. Quantification - Salmon           ##
 ##--------------------------------------##
 
-rule quant_salmon:
+rule salmon_quant:
     input:
         R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
         R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz",
