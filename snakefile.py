@@ -48,6 +48,7 @@
 # PART4: Hisat2/Sambamba
 # PART4.5: STAR/Sambamba
 # PART5: Generating readgroups
+# PART6: Salmon index
 # PART6: Quantification Salmon
 # PART7: FeatureCounts
 # PART8: Stringtie assembly/initial file formation
@@ -72,6 +73,7 @@ configfile: 'config.yaml'
 QC_raw = expand(config["BASE"] + config["QC_raw"] + '/{samples}_fastQC/', samples=config["SampleList"])
 QC_trim = expand(config["BASE"] + config["QC_trim"] + '/{samples}_fastQC/', samples=config["SampleList"])
 QUANT_feat = expand(config["BASE"] + config["QUANT_FC"] + '/project_genes_{samples}.txt', samples=config["SampleList"])
+SAL_index = config["INDEX_DIR"]
 QUANT_salmon = expand(config["BASE"] + config["QUANT_SAL"] + "/{samples}/", samples=config["SampleList"])
 KAL = expand(config["BASE"] + config["KAL"] + "/{samples}_kalOut", samples=config["SampleList"])
 RG = expand(config["BAMS_RG"] + "/{samples}.bam", samples=config["SampleList"])
@@ -85,7 +87,7 @@ STRING_mergeTranscript = config["ASS"] + "/merged.transcript.gtf"
 ## Specify targets
 rule all:
     input:
-        QC_trim + QC_raw + QUANT_feat + QUANT_salmon + KAL + STRING_ass + STRING_geneAbund + STRING_covRefs, STRING_merge, STRING_mergeTranscript
+        QC_trim + QC_raw + QUANT_feat + QUANT_salmon + KAL + STRING_ass + STRING_geneAbund + STRING_covRefs, SAL_index, STRING_merge, STRING_mergeTranscript
         #  RG
 
 ##--------------------------------------##
@@ -261,6 +263,24 @@ rule read_group:
         java -jar {params.picard} AddOrReplaceReadGroups I={input} O={output} RGID={params.RGID} RGLB={params.RGLB} RGPL={params.RGPU} RGPU={params.RGPU} RGSM={params.RGSM}
         """
 
+##--------------------------------------##
+## 6. Quantification - Salmon Index     ##
+##--------------------------------------##
+
+rule salmon_index:
+    input:
+        Tran = config["TRAN"]
+    output:
+        index_out = config["INDEX_DIR"]
+    params:
+        salmon = config["salmon"],
+        index_out = config["INDEX_DIR"]
+    threads: 1
+    message: "Salmon - Generating index from transcripts file"
+    shell:
+        """
+        {params.salmon} index -p {threads} -i {params.index_out} -t {input.Tran} --gencode --perfectHash
+        """
 
 ##--------------------------------------##
 ## 6. Quantification - Salmon           ##
@@ -269,13 +289,12 @@ rule read_group:
 rule quant_salmon:
     input:
         R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
-        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz",
-        Tran = config["TRAN"]
+        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz"
     output:
         out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
     params:
         salmon = config["salmon"],
-        index_out = config["INDEX_DIR"],
+        index_in = config["INDEX_DIR"],
         bootstrap = config["bootstrap"],
         out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
     threads: config["SAL_threads"]
@@ -286,9 +305,7 @@ rule quant_salmon:
 
     shell:
         """
-        ({params.salmon} index -p {threads} -i {params.index_out} -t {input.Tran} --gencode --perfectHash
-        {params.salmon} quant -l A -i {params.index_out} -p {threads} -1 {input.R1} -2 {input.R2}
-        --numBootstraps {params.bootstrap} -o {params.out}) 2> {log}
+        ({params.salmon} quant -l A -i {params.index_in} -p {threads} -1 {input.R1} -2 {input.R2} --numBootstraps {params.bootstrap} -o {params.out}) 2> {log}
         """
 
 
