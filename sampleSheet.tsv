@@ -1,17 +1,7 @@
-###################################################
-############# REMOVE THIS TEXT BLOCK  #############
-###################################################
-#												  #
-# This file is tab separated. The headings below  #
-# are the 8 columns that are required for the 	  #
-# snake file to run. The column number and names  #
-# can be changed to be more specific to your      #
-# analysis, just be sure to adapt the        	  #
-# tsv2yaml.sh script and snakefile accordingly.   #
-#												  #
-###################################################
-############# REMOVE THIS TEXT BLOCK  #############
-###################################################
-
-SampleID	Platform	Replicate	TreatmentGroup	Index	SuffixType	R1_FilePath	R2_FilePath
-A	B	C	D	E	F	G	H
+FILENAME	RG_SM	RG_ID	RG_PU	RG_PL	RG_LB	R1_extension	R2_extension	PATH
+sample_1	samp_1_A	NB501008.4	NB501008HYV7VBGXY.4	ILLUMINA	made_up_LB	_R1.fastq.gz	_R2.fastq.gz	/path/to/raw/fastq/files/
+sample_2	samp_2_A	NB501008.4	NB501008HYV7VBGXY.4	ILLUMINA	made_up_LB	_R1.fastq.gz	_R2.fastq.gz	/path/to/raw/fastq/files/
+sample_3	samp_3_B	NB501008.4	NB501008HYV7VBGXY.4	ILLUMINA	made_up_LB	_R1.fastq.gz	_R2.fastq.gz	/path/to/raw/fastq/files/
+sample_4	samp_4_B	NB501008.4	NB501008HYV7VBGXY.4	ILLUMINA	made_up_LB	_R1.fastq.gz	_R2.fastq.gz	/path/to/raw/fastq/files/
+sample_5	samp_5_C	NB501008.4	NB501008HYV7VBGXY.4	ILLUMINA	made_up_LB	_R1.fastq.gz	_R2.fastq.gz	/path/to/raw/fastq/files/
+sample_6	samp_6_C	NB501008.4	NB501008HYV7VBGXY.4	ILLUMINA	made_up_LB	_R1.fastq.gz	_R2.fastq.gz	/path/to/raw/fastq/files/

@@ -12,113 +12,95 @@
 # Read in file from commandline argument
 sed 1d $1 > tmp.tsv
 
-# replace all instances of '...' with a filepath/directory structure
-# Select the BAM key corresponding to the aligner to be used
-# Change "config...(dot)yaml" to whatever you want to call it
-cat > config.yaml <<__SCRIPT__
+## << denotes a here document - 
+cat > config.yaml <<__SCRIPT__ 
+THREADS: 8
+
 ## Directory paths
-BASE: '/path/to/desired/output/destination'
-QC_raw: '/0_FastQC_raw'
-QC_trim: '/0_FastQC_trim'
-TRIM: '/1_AdapterRemoval'
-# BAMS: '/2_Hisat2_sambamba_merged'
-# BAMS: '/2_STAR_sambamba'
-unmapped: '/unmappedReads'
-BAMS_RG: '/2_bams_read_group'
+BASE: '/path/to/parent/output/directory'
+RAW_FILE_PATH: '/path/to/raw/fastq/files'
+
+FASTQC: '/0_FastQC'
+QC_raw: '/FastQC_raw'
+QC_trim: '/FastQC_trim'
+
+AR: '/1_AdapterRemoval'
+
+ALIGN: '/2_STAR'
+BAMS: '/bams'
+RG_PICARD: '/bams_readgroups'
+
 QUANT_SAL: '/3_salmon'
-QUANT_FC: '/3_featureCounts'
-ASS: '/4_stringtie'
-KAL: '/5_kallisto'
+
+QUANT_FC: '/4_featureCounts'
+
+QUANT_STR: '/5_stringtie'
+
+QUANT_KAL: '/6_kallisto'
+
 LOG: '/logs'
 
 ## Data objects (afw)
-TRAN: '.../cdna.fa.gz'
-INDEX_hst2: '...'
-GTF: '...'
-KAL_idx: '.../.idx'
-
-## Function pathways (afw)
-AdapterRemoval: '.../AdapterRemoval'
-featurecounts: '.../featureCounts'
-stringtie: '.../stringtie'
-salmon: '.../salmon'
-hisat2: '.../hisat2'
-sambamba: '/localscratch/Programs/sambamba'
-picard: '.../picard.jar'
-kallisto: '.../kallisto'
+TRAN: '/path/to/cdna/transcripts/fasta.fa'
+GTF: '/path/to/organism/gtf/file.gtf'
 
 ## Adapter removal
-basename: '...'
 minquality_AR: 10
 minlength_AR: 25
 AR_threads: 1
-DISCARD: '/AdapterRemoval/excessReads'
+DISCARD: '/discarded_reads' ## not currently in use
 
 ## Fastqc - parameters apply to both raw and trimmed fastq files
 format: 'fastq'
 kmer: 9
-FQC_threads: 1
+
+## STAR index
+overhang: 149
+
+## STAR mapping
+BAMcompression: 1 ## Value between 1-10 where 1 is least compressed
+qualityFilter: 30
 
 ## Salmon quantifiation
-     # INDEX_DIR - change the file path to where the index will be built (e.g. in QUANT_SAL)
-INDEX_DIR: '.../Index'
 bootstrap: 100
-SAL_threads: 1
-
-## hisat2_sambamba
-quality: 30
-H2_threads: 1
-
-## STAR aligner
-genomeDir: '/data/biohub/Refs/zebrafish/STAR_index'
-compress: 5
-ST_threads: 1
 
 ## FeatureCounts
 minquality_FC: 10
 strandness: 1
-FC_threads: 1
 
 ## Stringtie
 minlength_ST: 30
-ST_threads: 1
 
 ## kallisto
 bootstrap: 100
-KAL_threads: 1
 
-## Edit this section
 SampleList:
 __SCRIPT__
 
-while read line
- do
+while read line; do
 
-################ ATTENTION ################
-# If you have changed the column names/number of columns in the sample sheet (.tsv),
-# you will need to alter the variable selection and dictionary structure below. 
+     # Parsing samplesheet columns
+     SAM=$(echo "$line" | cut -d $'\t' -f1)
+     RG_SM=$(echo "$line" | cut -d $'\t' -f2)
+     RG_ID=$(echo "$line" | cut -d $'\t' -f3)
+     RG_PU=$(echo "$line" | cut -d $'\t' -f4)
+     RG_PL=$(echo "$line" | cut -d $'\t' -f5)
+     RG_LB=$(echo "$line" | cut -d $'\t' -f6)
+     R1_extension=$(echo "$line" | cut -d $'\t' -f7)
+     R2_extension=$(echo "$line" | cut -d $'\t' -f8)
+     Path=$(echo "$line" | cut -d $'\t' -f9)
 
-
-     # Cutting samplesheet columns and assigning them to variables
-     Sam=$(echo "$line" | cut -d $'\t' -f1)
-     Plat=$(echo "$line" | cut -d $'\t' -f2)
-     Rep=$(echo "$line" | cut -d $'\t' -f3)
-     Treat=$(echo "$line" | cut -d $'\t' -f4)
-     Idx=$(echo "$line" | cut -d $'\t' -f5)
-     Suff=$(echo "$line" | cut -d $'\t' -f6)
-     Path1=$(echo "$line" | cut -d $'\t' -f7)
-     Path2=$(echo "$line" | cut -d $'\t' -f8)
-
-     # Creating dictionary for each sample - from samplesheet
-     echo "  "$Sam":" >> config.yaml
-     echo "    Sample: "\'$Sam\'"" >> config.yaml
-     echo "    Platform: "\'$Plat\'"" >> config.yaml
-     echo "    Replicate: "\'$Rep\'"" >> config.yaml
-     echo "    Treatment: "\'$Treat\'"" >> config.yaml
-     echo "    Index: "\'$Idx\'"" >> config.yaml
-     echo "    Suffix: "\'$Suff\'"" >> config.yaml
-     echo "    R1: "\'$Path1\'"" >> config.yaml
-     echo "    R2: "\'$Path2\'"" >> config.yaml
+     ## Creating YAML keys using parsed samplesheet variables
+     echo "  "$SAM":" >> config.yaml
+     echo "    Sample: "\'$SAM\'"" >> config.yaml
+     echo "    RG_SM: "\'$RG_SM\'"" >> config.yaml
+     echo "    RG_ID: "\'$RG_ID\'"" >> config.yaml
+     echo "    RG_PU: "\'$RG_PU\'"" >> config.yaml
+     echo "    RG_PL: "\'$RG_PL\'"" >> config.yaml
+     echo "    RG_LB: "\'$RG_LB\'"" >> config.yaml
+     echo "    R1: "\'$Path$SAM$R1_extension\'"" >> config.yaml
+     echo "    R2: "\'$Path$SAM$R2_extension\'"" >> config.yaml
+     
 # Now we have to input the samplesheet we want to parse but first remove first line
 done < tmp.tsv
 

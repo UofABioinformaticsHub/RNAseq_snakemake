@@ -1,138 +1,68 @@
-##---------------------------------------------------------------------------##
-# RNA-Seq analysis pipeline
-# @author Alastair Ludington
-# @id a164524
-# @email a1645424@adelaide.edu.au
-##---------------------------------------------------------------------------##
+###########################################################################
+## Author: Alastair Ludington
+## Email: alastair.ludington@adelaide.edu.au
+## Date: 15/01/2018
+## Developed on behalf of the Bioinformatics Hub, University of Adelaide
+##
+## The purpose of this pipeline is to generate gene count data from a
+## range of quantification software.
+## The pipeline is still in active development. This is v0.1, which is 
+## usable but still has growing pains
+###########################################################################
 
-##---------------------------------------------------------------------------##
-# This is an RNA-seq analysis snakefile script for use within the Adelaide
-# University Bioinformatics hub. The snakefile is adapted from Dr. Jimmy
-# Breen's bash script found at the following address:
-# github.com/jimmybgammyknee/gammytools/blob/master/RRI_RNAseq_pipeline.sh.
-##---------------------------------------------------------------------------##
+# from snakemake.utils import R
+# import glob
 
-##---------------------------------------------------------------------------##
-# Adaptations to the samplesheet column names and the tsv2yaml.sh will result
-# in discrepancies between the master snakefile and config.yaml file. Be sure
-# to check that the `config["..."]` commands throughout the snakefile match
-# the adaptations that have been made.
-##---------------------------------------------------------------------------##
-
-##---------------------------------------------------------------------------##
-# To run snakemake pipeline:
-# Runs on python 3
-# snakemake -j 2 --core 10 -s snakefile.py
-    # snakemake - specifying the snakemake executable
-    # -j - specifying how many jobs to run in parallel
-    # --core - specifying the number of cores to use (note: -j * --core)
-    # -s - snakefile
-# Run specific rule: include -R followed by rule name
-##---------------------------------------------------------------------------##
-
-##---------------------------------------------------------------------------##
-# Development:
-    # STAR:
-        # Untested
-    # READGROUP:
-        # Not working, in development.
-##---------------------------------------------------------------------------##
-
-
-##---------------------------------------------------------------------------##
-# Pipeline ToC:
-# PART0: Targets for pipeline
-# PART1: AdapterRemoval trimming/removal
-# PART2: QC raw
-# PART3: QC trimmed
-# PART4: Hisat2/Sambamba
-# PART4.5: STAR/Sambamba
-# PART5: Generating readgroups
-# PART6: Salmon index
-# PART6: Quantification Salmon
-# PART7: FeatureCounts
-# PART8: Stringtie assembly/initial file formation
-# PART8.5 Stringtie making merged.transcripts.gtf
-# PART9: Kallisto
-##---------------------------------------------------------------------------##
-
-##---------------------------------------------------------------------------##
-
-# Importing required utilities
-import glob
-
-## Configuration file
-# Include path if not in snakefile directory
 configfile: 'config.yaml'
 
-##----------------------------------------------------------------------------##
-## 0. Targets for analysis                                                    ##
-##----------------------------------------------------------------------------##
+QC_raw = config["BASE"] + config["FASTQC"] + config["QC_raw"]
+QC_trim = config["BASE"] + config["FASTQC"] + config["QC_trim"]
+SAL = expand(config["BASE"] + config["QUANT_SAL"] + '/{samples}/', samples=config["SampleList"])
+KAL = expand(config["BASE"] + config["QUANT_KAL"] + "/{samples}/", samples=config["SampleList"])
+FC = config["BASE"] + config["QUANT_FC"] + '/counts.txt'
+ST = config["BASE"] + config["QUANT_STR"] + "/merged.transcript.gtf"
+STAR = expand(config["BASE"] + config["ALIGN"] + config["BAMS"] + '/{samples}.bam', samples=config["SampleList"])
+# HTML = config["BASE"] + config["FASTQC"] + config["QC_trim"] + '/ngsReports_Fastqc.html'
 
-## Target files
-QC_raw = expand(config["BASE"] + config["QC_raw"] + '/{samples}_fastQC/', samples=config["SampleList"])
-QC_trim = expand(config["BASE"] + config["QC_trim"] + '/{samples}_fastQC/', samples=config["SampleList"])
-QUANT_feat = expand(config["BASE"] + config["QUANT_FC"] + '/project_genes_{samples}.txt', samples=config["SampleList"])
-SAL_index = config["INDEX_DIR"]
-QUANT_salmon = expand(config["BASE"] + config["QUANT_SAL"] + "/{samples}/", samples=config["SampleList"])
-KAL = expand(config["BASE"] + config["KAL"] + "/{samples}_kalOut", samples=config["SampleList"])
-# RG = expand(config["BAMS_RG"] + "/{samples}.bam", samples=config["SampleList"])
-STRING_ass = expand(config["BASE"] + config["ASS"] + '/{samples}_assembly.gtf', samples=config["SampleList"])
-STRING_geneAbund = expand(config["BASE"] + config["ASS"] + '/{samples}_gene_abund.tab', samples=config["SampleList"])
-STRING_covRefs = expand(config["BASE"] + config["ASS"] + '/{samples}_cov_refs.gtf', samples=config["SampleList"])
-STRING_merge = config["BASE"] + config["ASS"] + '/merged.gtf',
-STRING_mergeTranscript = config["BASE"] + config["ASS"] + "/merged.transcript.gtf"
 
-## Specify targets
+## add/remove variables that you want to run
 rule all:
     input:
-         QC_trim +
-         QC_raw +
-         QUANT_feat +
-         QUANT_salmon +
-         KAL +
-         STRING_ass +
-         STRING_geneAbund +
-         STRING_covRefs,
-         STRING_merge,
-         STRING_mergeTranscript,
-         SAL_index
-         ## Work in progress - RG
+    	STAR + SAL + KAL, FC, ST, QC_raw, QC_trim
+        
 
 
 ##--------------------------------------##
 ## 1. Adapter removal                   ##
 ##--------------------------------------##
 
-rule adpt_trimming:
+rule Adapter_removal:
     input:
         R1 = lambda wildcards: config["SampleList"][wildcards.samples]["R1"],
         R2 = lambda wildcards: config["SampleList"][wildcards.samples]["R2"]
     output:
-        R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
-        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz"
+        R1 = config["BASE"] + config["AR"] + "/{samples}_trim1.fastq.gz",
+        R2 = config["BASE"] + config["AR"] + "/{samples}_trim2.fastq.gz"
     params:
-        AdapterRemoval = config["AdapterRemoval"],
         min_qual = config["minquality_AR"],
         min_len = config["minlength_AR"],
-        name = lambda wildcards: config["basename"] + "_" + config["SampleList"][wildcards.samples]["Sample"],
-        excessReads = config["BASE"] + config["TRIM"] + config["DISCARD"]
-    threads: config["AR_threads"]
+    threads: config["THREADS"]
     message:
-        "AdapterRemoval - Trimming reads from fastq files"
+        "ADAPTERREMOVAL - Trimming reads from file {wildcards.samples}"
 
     shell:
         """
-        mkdir -p {params.excessReads}
-
-        {params.AdapterRemoval} --file1 {input.R1} --file2 {input.R2} \
-        --output1 {output.R1} --output2 {output.R2} \
-        --threads {threads} --gzip --basename {params.name} --trimqualities --trimns \
-        --minquality {params.min_qual} --minlength {params.min_len}
-
-        mv *.truncated.gz {params.excessReads}
-		mv *.discarded.gz {params.excessReads}
-		mv *.settings {params.excessReads}
+        AdapterRemoval \
+        --file1 {input.R1} \
+        --file2 {input.R2} \
+        --output1 {output.R1} \
+        --output2 {output.R2} \
+        --threads {threads} \
+        --gzip \
+        --trimqualities \
+        --trimns \
+        --minquality {params.min_qual} \
+        --minlength {params.min_len}
         """
 
 
@@ -140,293 +70,346 @@ rule adpt_trimming:
 ## 2. Quality Control - raw             ##
 ##--------------------------------------##
 
-rule fastqc:
+SUF = ["_R1","_R2"]
+
+rule fastqc_raw:
     input:
-        R1 = lambda wildcards: config["SampleList"][wildcards.samples]["R1"],
-        R2 = lambda wildcards: config["SampleList"][wildcards.samples]["R2"]
+        expand(config["RAW_FILE_PATH"] + '/{samples}{suf}.fastq.gz', samples=config["SampleList"], suf=SUF)
     output:
-        config["BASE"] + config["QC_raw"] + '/{samples}_fastQC/'
+        config["BASE"] + config["FASTQC"] + config["QC_raw"]
     params:
         file_format = config["format"],
-        kmer = config["kmer"],
-        out_dir = config["BASE"] + config["QC_raw"] + '/{samples}_fastQC/'
-    threads: config["FQC_threads"]
+        kmer = config["kmer"]
+        # RMD = config["BASE"] + '/ngsReports_Fastqc.Rmd'
+    threads: config["THREADS"]
     message:
-        "fastQC - Quality control of raw reads"
+        "FASTQC - Quality control of raw reads"
 
     shell:
         """
-        module load fastQC/0.11.2
-        fastqc -t {threads} -k {params.kmer} --outdir {params.out_dir} -f {params.file_format} {input.R1} {input.R2}
+        mkdir -p {output}
+        fastqc \
+        -t {threads} \
+        -k {params.kmer} \
+        --outdir {output} \
+        -f {params.file_format} \
+        {input}
         """
-
+#       cp {params.RMD} {output}
 
 ##--------------------------------------##
 ## 3. Quality Control - trimmed         ##
 ##--------------------------------------##
 
+TRIM  = ["trim1", "trim2"]
+
 rule fastqc_trimmed:
     input:
-        R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
-        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz"
+        expand(config["BASE"] + config["AR"] + '/{samples}_{trim}.fastq.gz', samples=config["SampleList"], trim=TRIM)
     output:
-        config["BASE"] + config["QC_trim"] + '/{samples}_fastQC/'
+        config["BASE"] + config["FASTQC"] + config["QC_trim"]
     params:
         file_format = config["format"],
-        kmer = config["kmer"],
-        out_dir = config["BASE"] + config["QC_trim"] + '/{samples}_fastQC/'
-    threads: config["FQC_threads"]
-    message:
-        "fastQC - Quality control of trimmed reads"
+        kmer = config["kmer"]
+        # RMD = config["BASE"] + '/ngsReports_Fastqc.Rmd'
+    threads: config["THREADS"]
 
     shell:
         """
-        module load fastQC/0.11.2
-        fastqc -t {threads} -k {params.kmer} -f {params.file_format} --outdir {params.out_dir}  {input.R1} {input.R2}
+        mkdir -p {output}
+
+        fastqc \
+        -t {threads} \
+        -k {params.kmer} \
+        -f {params.file_format} \
+        --outdir {output} \
+        {input}
         """
+#        cp {params.RMD} {output}
 
-
-##--------------------------------------##
-## 4. Alignment                         ##
-##--------------------------------------##
-
-rule hisat2_sambamba:
-    input:
-        R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
-        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz"
-    output:
-        unmapped = config["BASE"] + config["BAMS"] + config["unmapped"] + '/{samples}_unmapped.fastq',
-        B1 = temp(config["BASE"] + config["BAMS"] + '/{samples}_temp.bam'),
-        B2 = config["BASE"] + config["BAMS"] + '/{samples}.bam'
-    params:
-        hisat2 = config["hisat2"],
-        sambamba = config["sambamba"],
-        idx = config["INDEX_hst2"],
-        qual = config["quality"]
-    threads: config["H2_threads"]
-    message:
-        "Hisat2/Sambamba - Aligning reads and generating a merged, sorted bam file"
-    log:
-        config["BASE"] + config["LOG"] + '/Align_hisat2/{samples}.log'
-
-    shell:
-        """
-        ({params.hisat2} -p {threads} -x {params.idx} --un-gz {output.unmapped} -1 {input.R1} -2 {input.R2} | \
-        samtools view -bhS -q{params.qual} - 1> {output.B1}) 2> {log}
-        {params.sambamba} sort -p -t {threads} -o {output.B2} {output.B1}
-        """
-
-
-##--------------------------------------##
-## 4.5. Alignment                         ##
-##--------------------------------------##
-
-# rule starAlignment:
-#     input:
-#         R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
-#         R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz"
+# rule FQC_report:
+#     input: 
+#         RMD = config["BASE"] + config["FASTQC"] + config["QC_trim"] + '/ngsReports_Fastqc.Rmd'
 #     output:
-#         B1 = temp(config["BASE"] + config["BAMS"] + '/{samples}_temp.bam'),
-#         B2 = config["BASE"] + config["BAMS"] + '/{samples}.bam'
+#         config["BASE"] + config["FASTQC"] + config["QC_trim"] + 'ngsReports_Fastqc.html'
 #     params:
-#         sambamba = config["sambamba"],
-#         genomeDir = config["genomeDir"],
-#         compress = config["compress"]
-#     threads: config["ST_threads"]
-#     message: 'STAR: Alignment of trimmed reads'
-#     log: config["BASE"] + config["LOG"] + '/STAR/{samples}.log'
-#     shell:
-#         """
-#         module load STAR/2.5.1a-foss-2015b
-#
-#         (STAR --runThreadN {threads} \
-#                 --genomeDir {params.genomeDir} \
-#                 --readFilesIn {input.R1} {input.R2} \
-#                 --readFilesCommand gunzip -c \
-#                 --outSAMtype BAM Unsorted \
-#                 --outBAMcompression {params.compress} | \
-#                 samtools view -bhS -q{params.qual} - 1> {output.B1}) 2> {log}
-#         {params.sambamba} sort -p -t {threads} -o {output.B2} {output.B1}
-#         """
+#         NAME = 'ngsReports_Fastqc.html',
+#         PATH = config["BASE"] + config["FASTQC"] + config["QC_trim"]
+#     run:
+#         R("""
+#         library(rmarkdown)
+#         render({input})  
+#         """)
+
+# rmarkdown::render({input}, output_format = "html_document",
+#         output_file = {params.NAME},output_dir = {params.PATH},
+#         knit_root_dir = dirname({input}), envir = new.env(), quiet = quiet,
+#         params = list(dataType = "Transcriptome", species = "Hsapiens"))
 
 
 ##--------------------------------------##
-## 5. ReadGroup - bam headers         ##
+## 4. STAR ALIGNMENT                    ##
+##--------------------------------------##
+
+rule STAR_index:
+    input:
+        genomeFasta = config["TRAN"],
+        GTFfile = config["GTF"]
+    output:
+        config["BASE"] + config["ALIGN"] + '/STAR_index'
+    params:
+        overhang = config["overhang"]
+    threads: config["THREADS"]
+    message: 
+        "STAR - Generating Index for {input.genomeFasta} using {input.GTFfile}"
+    log:
+        config["BASE"] + config["LOG"] + '/STAR_index.log'
+    shell:
+        """
+        STAR \
+        --runMode genomeGenerate \
+        --runThreadN {threads} \
+        --genomeDir {output} \
+        --genomeFastaFiles {input.genomeFasta} \
+        --sjdbGTFfile {input.GTFfile} \
+        --sjdbOverhang {params.overhang} 2> {log}
+        """
+
+
+rule STAR_alignment:
+    input:
+        R1 = config["BASE"] + config["AR"] + "/{samples}_trim1.fastq.gz",
+        R2 = config["BASE"] + config["AR"] + "/{samples}_trim2.fastq.gz",
+        IDX = rules.STAR_index.output
+    output:
+        B0 = config["BASE"] + config["ALIGN"] + config["BAMS"] + '/{samples}_STAR.Aligned.out.bam',
+        B1 = config["BASE"] + config["ALIGN"] + config["BAMS"] + '/{samples}_filtered.bam',
+        B2 = config["BASE"] + config["ALIGN"] + config["BAMS"] + '/{samples}.bam'
+    params:
+        BAMcompression = config["BAMcompression"],
+        qualityFilter= config["qualityFilter"],
+        OUT = config["BASE"] + config["ALIGN"] + config["BAMS"] + '/{samples}_STAR.'
+    threads: config["THREADS"]
+    message: 
+    	'STAR - Aligning reads of {wildcards.samples}'
+    shell:
+        """
+        STAR \
+        --runThreadN {threads} \
+        --genomeDir {input.IDX} \
+        --readFilesIn {input.R1} {input.R2} \
+        --readFilesCommand gunzip -c \
+        --outFileNamePrefix {params.OUT} \
+        --outSAMtype BAM Unsorted \
+        --outBAMcompression {params.BAMcompression} 
+
+        samtools view -h -b -q {params.qualityFilter} {output.B0} -o {output.B1}
+        
+        sambamba sort -p -t {threads} -o {output.B2} {output.B1}
+
+        """
+
+        
+##--------------------------------------##
+## 5. ReadGroup - bam headers         	##
 ##--------------------------------------##
 
 rule read_group:
     input:
-        config["BASE"] + config["BAMS"] + "/{samples}.bam"
+        config["BASE"] + config["ALIGN"] + config["BAMS"] + '/{samples}.bam'
     output:
-        config["BASE"] + config["BAMS_RG"] + "/{samples}.bam"
+        RG = config["BASE"] + config["ALIGN"] + config["RG_PICARD"] + '/{samples}.bam',
+        IDX = config["BASE"] + config["ALIGN"] + config["RG_PICARD"] + '/{samples}.bam.bai'
     params:
-        picard = config["picard"],
-        RGID = lambda wildcards: config["SampleList"][
-            wildcards.samples]["Replicate"],
-        RGLB = lambda wildcards: config["SampleList"][
-            wildcards.samples]["Treatment"],
-        RGPL = lambda wildcards: config["SampleList"][
-            wildcards.samples]["Platform"],
-        RGPU = lambda wildcards: config[
-            "SampleList"][wildcards.samples]["Index"],
-        RGSM = lambda wildcards: config[
-            "SampleList"][wildcards.samples]["Sample"]
-    # threads: config["threads"]
+        RGID = lambda wildcards: config["SampleList"][wildcards.samples]["RG_ID"],
+        RGLB = lambda wildcards: config["SampleList"][wildcards.samples]["RG_LB"],
+        RGPL = lambda wildcards: config["SampleList"][wildcards.samples]["RG_PL"],
+        RGPU = lambda wildcards: config["SampleList"][wildcards.samples]["RG_PU"],
+        RGSM = lambda wildcards: config["SampleList"][wildcards.samples]["RG_SM"]
     message:
-        "Picard AddOrReplaceReadGroups - Generating bam file readgroups"
+        "PICARD - Assigning readgroup information to {wildcards.samples}"
+    threads: config["THREADS"]
+    log:
+        config["BASE"] + config["LOG"] + config["RG_PICARD"] + '/{samples}.log'
 
     shell:
         """
-        java -jar {params.picard} AddOrReplaceReadGroups I={input} O={output} RGID={params.RGID} RGLB={params.RGLB} RGPL={params.RGPU} RGPU={params.RGPU} RGSM={params.RGSM}
+        java -jar $EBROOTPICARD/picard.jar AddOrReplaceReadGroups \
+        I={input} \
+        O={output.RG} \
+        RGID={params.RGID} \
+        RGLB={params.RGLB} \
+        RGPL={params.RGPL} \
+        RGPU={params.RGPU} \
+        RGSM={params.RGSM}
+
+        sambamba index -t {threads} {output.RG} {output.IDX}
         """
 
+
 ##--------------------------------------##
-## 6. Quantification - Salmon Index     ##
+## 6. Salmon - Quantification        	##
 ##--------------------------------------##
 
 rule salmon_index:
-    input:
-        Tran = config["TRAN"]
-    output:
-        index_out = config["INDEX_DIR"]
-    params:
-        salmon = config["salmon"],
-        index_out = config["INDEX_DIR"]
-    threads: 1
-    message: "Salmon - Generating index from transcripts file"
-    shell:
-        """
-        {params.salmon} index -p {threads} -i {params.index_out} -t {input.Tran} --gencode --perfectHash
-        """
+	input:
+		config["TRAN"]
+	output:
+		config["BASE"] + config["QUANT_SAL"] + config["SALMON_INDEX"]
+	threads: config["THREADS"]
+	message: 
+		"SALMON - Generating Index of {input} and storing it in {output}"
+	shell:
+	    """
+	    salmon index \
+	    -p {threads} \
+	    -i {output} \
+	    -t {input} \
+	    --gencode \
+	    --perfectHash 
+	    """
 
-##--------------------------------------##
-## 6. Quantification - Salmon           ##
-##--------------------------------------##
-
-rule salmon_quant:
+rule quant_salmon:
     input:
-        R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
-        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz",
-        index_in = rules.salmon_index.output
+        R1 = config["BASE"] + config["AR"] + "/{samples}_trim1.fastq.gz",
+        R2 = config["BASE"] + config["AR"] + "/{samples}_trim2.fastq.gz",
+        index = rules.salmon_index.output
     output:
-        out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
+        out = config["BASE"] + config["QUANT_SAL"] + '/{samples}/'
     params:
-        salmon = config["salmon"],
-        bootstrap = config["bootstrap"],
-        out = config["BASE"] + config["QUANT_SAL"] + "/{samples}/"
-    threads: config["SAL_threads"]
+        bootstrap = config["bootstrap"]
+    threads: config["THREADS"]
     message:
-        "Salmon - Quantification of transcripts"
+        "SALMON - Quantification of transcripts for samples {wildcards.samples}"
     log:
         config["BASE"] + config["LOG"] + config["QUANT_SAL"] + "/{samples}.log"
 
     shell:
         """
-        ({params.salmon} quant -l A -i {input.index_in} -p {threads} -1 {input.R1} -2 {input.R2} --numBootstraps {params.bootstrap} -o {params.out}) 2> {log}
+        salmon quant \
+        -l A \
+        -i {input.index} \
+        -p {threads} \
+        -1 {input.R1} \
+        -2 {input.R2} \
+        --numBootstraps {params.bootstrap} \
+        -o {output} 2> {log}
         """
 
+##--------------------------------------##
+## 7. Kallisto - quantification         ##
+##--------------------------------------##
+
+rule kallisto_index:
+	input:
+		fasta = config["TRAN"],
+	output:
+		config["BASE"] + config["QUANT_KAL"] + config["KALLISTO_INDEX"]
+	message:
+		"KALLISTO - Generating Kallisto index file"
+	shell:
+		"""
+        module load kallisto/0.43.1-foss-2017a
+		kallisto index -i {output} \
+		{input.fasta}
+		"""
+
+rule quant_kallisto:
+    input:
+        R1 = config["BASE"] + config["AR"] + "/{samples}_trim1.fastq.gz",
+        R2 = config["BASE"] + config["AR"] + "/{samples}_trim2.fastq.gz",
+        IDX = rules.kallisto_index.output
+    output:
+        out = config["BASE"] + config["QUANT_KAL"] + "/{samples}/"
+    params:
+        bootstrap = config["bootstrap"],
+    threads: config["THREADS"]
+    message: 'Kallisto - transcript quantification (validation)'
+    log:
+        config["BASE"] + config["LOG"] + config["QUANT_KAL"] + '/{samples}.log'
+
+    shell:
+        """
+        module load kallisto/0.43.1-foss-2017a
+        kallisto quant \
+        -i {input.IDX} \
+        -t {threads} \
+        -b {params.bootstrap} \
+        -o {output} {input.R1} {input.R2}
+        """
 
 ##--------------------------------------##
-## 7. Quantification - FeatureCounts    ##
+## 8. FeatureCounts - Quantification    ##
 ##--------------------------------------##
 
 rule quant_featCount:
     input:
-        B1 = config["BASE"] + config["BAMS"] + "/{samples}.bam",
-        gtf = config["GTF"]
+    	BAMS = expand(config["BASE"] + config["ALIGN"] + config["RG_PICARD"] + '/{samples}.bam', samples=config["SampleList"]),
+        GTFfile = config["GTF"]
     output:
-        TPG = config["BASE"] + config["QUANT_FC"] + '/project_genes_{samples}.out',
-        PG = config["BASE"] + config["QUANT_FC"] + '/project_genes_{samples}.txt'
+        TPG = config["BASE"] + config["QUANT_FC"] + '/counts.out',
+        PG = config["BASE"] + config["QUANT_FC"] + '/counts.txt'
     params:
-        featurecounts = config["featurecounts"],
         qual = config["minquality_FC"],
         strandness = config["strandness"]
-    threads: config["FC_threads"]
+    threads: config["THREADS"]
     message:
-        "Featurecounts - Transcript quantification at the gene level"
-    log:
-        config["BASE"] + config["LOG"] + '/Quant_featureCount/{samples}.log'
+        "FEATURECOUNTS - Transcript quantification at the gene level"
 
     shell:
         """
-        ({params.featurecounts} -Q {params.qual} -s {params.strandness} -T {threads} -a {input.gtf} -o {output.TPG} {input.B1}
-        cut -f1,7- {output.TPG} | sed 1d > {output.PG}) 2> {log}
+        featureCounts \
+        -Q {params.qual} \
+        -s {params.strandness} \
+        -T {threads} \
+        -a {input.GTFfile} \
+        -o {output.TPG} {input.BAMS}
+
+        cut -f1,7- {output.TPG} | \
+        sed 1d > {output.PG}
         """
 
-
 ##--------------------------------------##
-## 8. Assembly - Part 1                 ##
+## 9. Stringtie - Quantification        ##
 ##--------------------------------------##
 
-rule assembly_stringtie:
+rule quant_stringtie_assembly:
     input:
-        BAM = config["BASE"] + config["BAMS"] + '/{samples}.bam',
-        gtf = config["GTF"]
+        BAM = config["BASE"] + config["ALIGN"] + config["RG_PICARD"] + '/{samples}.bam',
+        GTFfile = config["GTF"]
     output:
-        ass = config["BASE"] + config["ASS"] + '/{samples}_assembly.gtf',
-        genabund = config["BASE"] + config["ASS"] + '/{samples}_gene_abund.tab',
-        covref = config["BASE"] + config["ASS"] + '/{samples}_cov_refs.gtf'
+        STR_OUT = config["BASE"] + config["QUANT_STR"] + '/{samples}_assembly.gtf',
+        genabund = config["BASE"] + config["QUANT_STR"] + '/{samples}.tab',
+        covref = config["BASE"] + config["QUANT_STR"] + '/{samples}_cov_refs.gtf'
     params:
-        stringtie = config["stringtie"],
         tran_len = config["minlength_ST"]
-    threads: config["ST_threads"]
+    threads: config["THREADS"]
     message:
-        "Stringtie pt 1 - Generating assembly, gene abundance and coverage statistics"
+        "STRINGTIE  - Gene abundance and coverage statistics for {wildcards.samples}"
 
     shell:
         """
-        {params.stringtie} -p {threads} -m {params.tran_len} -G {input.gtf} \
-        -o {output.ass} \
+        stringtie -p {threads} \
+        -m {params.tran_len} \
+        -G {input.GTFfile} \
+        -o {output.STR_OUT} \
         -A {output.genabund} \
         -C {output.covref} \
         {input.BAM}
         """
 
 
-##--------------------------------------##
-## 8.5 Stringtie merging assembly files ##
-##--------------------------------------##
-
-## Gets all files that have the *_assembly.gtf string
-files = glob.glob(config["BASE"] + config["ASS"] + "/*_assembly.gtf")
-
-rule stringtie_merge:
+rule quant_stringtie_merge:
     input:
-        gtfFiles = files,
-        gtf = config["GTF"]
+        ST_GTF = expand(config["BASE"] + config["QUANT_STR"] + '/{samples}_assembly.gtf', samples=config["SampleList"]),
+        GFTfile = config["GTF"]
     output:
-        mergeGTF = config["BASE"] + config["ASS"] + '/merged.gtf',
-        mergedTRAN = config["BASE"] + config["ASS"] + "/merged.transcript.gtf"
-    params:
-        stringtie = config["stringtie"]
+        mergeGTF = config["BASE"] + config["QUANT_STR"] + '/merged.gtf',
+        mergedTRAN = config["BASE"] + config["QUANT_STR"] + "/merged.transcript.gtf"
     message:
-        "Stringtie pt 2 - Generating a merged gtf file from all samples"
+        "STRINGTIE - Generating merged GTF from all samples"
     shell:
         """
-        {params.stringtie} --merge -G {input.gtf} -o {output.mergeGTF} {input.gtfFiles}
+        stringtie --merge -G {input.GFTfile} -o {output.mergeGTF} {input.ST_GTF}
         awk '{{if($3=="transcript")print}}' {output.mergeGTF} > {output.mergedTRAN}
-        """
-
-
-##--------------------------------------##
-## 9. Kallisto                          ##
-##--------------------------------------##
-
-rule kallisto:
-    input:
-        R1 = config["BASE"] + config["TRIM"] + "/{samples}_t1.fastq.gz",
-        R2 = config["BASE"] + config["TRIM"] + "/{samples}_t2.fastq.gz",
-        KAL = config["KAL_idx"]
-    output:
-        out = config["BASE"] + config["KAL"] + "/{samples}_kalOut"
-    params:
-        kallisto = config["kallisto"],
-        bootstrap = config["bootstrap"],
-        outDir = config["BASE"] + config["KAL"] + "/{samples}_kalOut"
-    threads: config["KAL_threads"]
-    message: 'Kallisto - transcript quantification (validation)'
-
-    shell:
-        """
-        {params.kallisto} quant -i {input.KAL} -t {threads} -b {params.bootstrap} -o {params.outDir} {input.R1} {input.R2}
         """
