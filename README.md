@@ -1,94 +1,221 @@
-# __RNAseq_snakemake__
 
-This is an RNAseq analysis pipeline written in snakemake for the UofA Bioinformatics Hub. An outline of the pipeline is presented below
+# University of Adelaide Snakemake RNA-seq Analysis Pipeline
 
-- PART0: Targets for pipeline
-- PART1: AdapterRemoval fastq
-- PART2: QC raw fastq
-- PART3: QC trimmed fastq
-- PART4: Hisat2/Sambamba
-- PART4.5: STAR/Sambamba
-- PART5: Generating readgroups
-- PART6: Quantification Salmon
-- PART7: FeatureCounts
-- PART8: Stringtie assembly part 1
-- PART8.5 Stringtie making part 2
-- PART9: Kallisto
+Snakemake is a workflow management system which can be used to create reproducible analysis pipelines. Here, we have developed a standardised pipeline for RNA-seq analysis, that takes paired raw sequence data as input and outputs count matrices from a range of quantification tools.
 
-### __Installing snakemake__
+## Pipeline setup
 
-Snakemake is available via module on phoenix (need to check specifics). To install Snakemake on a personal computer, see the [installation page](https://snakemake.readthedocs.io/en/stable/getting_started/installation.html) from the snakemake documentation.
+The instructions below will help prepare your Phoenix environment to be able to run the pipeline, format your data and generate the few assistance files required by the pipeline. 
 
-### __Usage__
+## Setting up a Python Virtual Environment
 
-Clone the repository to obtain the `snakefile`, `sampleSheet` and configuration file compiler `tsv2yaml`. Fill in the sample sheet with sample information, being sure to keep the tab separated format. Columns can be added/removed from the sample sheet (or an Illumina samplesheet can be used in replacement in tsv format) but will result in mandatory edits to the the config compiler and snakefile. Specify directory structure and program parameters in the `tsv2yaml.sh` script.
+#### Background on Python Virtual Environment
 
-To generate the configuration file, run the `tsv2yaml.sh` script as below:
+Python applications often require packages and modules (utilities/tools) that don't come with the standard python library. Often, software we want to use will require a specific version of python, python library or an accompanying piece of software. The reason for these dependencies can range from how the software was built to it requiring obsolete dependencies. 
+Consequently, it's not always possible for the system wide python installation to meet the needs of every piece of software we want to use. A solution to this problem is to create and use a python virtual environment (PVE). PVEs are self contained directories that can be built with any python version, where we can install any software we desire. 
+The benefit of PVEs is that they are independent of the parent system, meaning they do not intefere with system wide python packages or settings. It also means each python tool we want to use can have its own PVE, which will avoid any incompatibility issues that might otherwise be faced. 
 
-```./tsv2yaml.sh sampleSheet.tsv```
+#### Setting up a Python Virtual Environment
 
-The default output will be a configuration file in yaml format labelled `config.yaml`. Any changes made to key values (any string before a colon '`:`''), dictionary structure (tab indentation for keys) or config file name are likely to result in incompatibilities between the snakefile and the config file. Be sure to go through the snakefile and make the necessary amendments to the affected fields (e.g. config[""} in the snakefile).
+The Phoenix team have written a great [tutorial](https://wiki.adelaide.edu.au/hpc/index.php/Python_virtual_environment) on activating and using PVEs, which we recommend you follow. However, a breif summary of the set up process is below.
 
+First, load the module for python 3.6.1 in a Phoenix session
 
-##### _Standard execution_
+```
+$ module load Python/3.6.1-foss-2016b
+```
 
-To run the snakefile, specify the snakemake environment and provide the snakefile as below:
+Then, create the PVE in your `Fast` directory (or any directory you like really...), giving the PVE a sensible name that has meaning to its function. Snakemake requires python 3, so we will need to specify this when creating the environment. 
 
-```snakemake -s snakefile```
+```
+$ virtualenv --system-site-packages -p python3 $FASTDIR/path/to/desired/location/py_snakemake
+```
 
-The `-s` argument is used to specify a snakefile. If the snakefile is in the directory where the snakemake executable is run and does not have any extensions, the `-s` argument is not necessary.
+That's it! The above command will create the directory `py_snakemake` which will have everything it needs to function as a PVE.
 
+## Sample sheet 
 
-##### _Dry run_
+The RNAseq pipeline uses what's called a `YAML` configuration file to provide information to the `snakefile`, the script that is executed. Configuration files are beneficial as they can be edited on the fly, with the resulting changes flowing on to the executable script. 
+Here, we've written a bash script that generates a YAML configuration file when provided with a `.tsv` file containing sample information.
+In the GitHub repository, there is a template samplesheet file called `samplesheet.tsv`. The column headers are described in greater detail below. The `RG_` prefix stands for `readgroup`, and is information that will be used to generate readgroups for the alignment files (BAM files).
 
-A dry run tests whether the rules in the snakefile have been defined correctly, without generating any output. Dry runs can be executed with the `-n` argument:
+- **FILENAME**
+    - Full filenames of the fastq files, not including file extensions (e.g. DO NOT include \_R1.fastq.gz or \_R2.fastq.gz).
+- **RG_SM** 
+    - Shortened unique sample identifier which is used for BAM readgroups. This can often be a unique fragment of the filename above.
+- **RG_ID** 
+    - This column is to specify which group reads belong to. It is built from the header line of the fastq files.
+- **RG_PU**
+    - The platform unit is a combination of the flowcell barcode, the lane number and sample barcode.
+- **RG_PL** 
+    - Platform the sequences were generated on.
+- **RG_LB** 
+    - Library preparation method.
+- **R1_extension**
+    - This is the extension for the forward reads (_e.g. \_R1.fastq.gz, \_R1.fastq, \_R1.fq.gz etc..._).
+- **R2_extension**  
+    - This is the extension for the reverse reads .
+- **PATH**
+    - The file path to where the reads are located on Phoenix. Remember to include a final backslash (/) at the end of the path!
 
-```snakemake -s snakefile -n```
+Much of how to generate the IDs for the readgroups is explained in detail at the [following link](https://gatkforums.broadinstitute.org/gatk/discussion/6472/read-groups).
+An example `sampleSheet.tsv` with three paired-end samples is presented below.
 
-If there are errors in the snakefile, whether it's a typo in the code, missing input files or undefined variables, a dry run will provide a detailed message of what went wrong and on what line.
+**FILENAME**|**RG\_SM**|**RG\_ID**|**RG\_PU**|**RG\_PL**|**RG\_LB**|**R1\_extension**|**R2\_extension**|**PATH**
 
-##### _Overriding thread usage and parallelisation_
+:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:
+sample1\_filename|N9001|NB501008.4|NB501008HYV7VBGXY.4|ILLUMINA|made\_up\_LB|\_R1.fastq.gz|\_R2.fastq.gz|/fast/users/a1234567/data/fastq/
+sample2\_filename|AX834|NB501008.4|NB501008HYV7VBGXY.4|ILLUMINA|made\_up\_LB|\_R1.fastq.gz|\_R2.fastq.gz|/fast/users/a1234567/data/fastq/
+sample3\_filename|LY610|NB501008.4|NB501008HYV7VBGXY.4|ILLUMINA|made\_up\_LB|\_R1.fastq.gz|\_R2.fastq.gz|/fast/users/a1234567/data/fastq/
 
-From the commandline, the number of jobs to be run in parallel can be set using the `-j` argument:
+## Building the `YAMl` configuration file
 
-```snakemake -j 5 -s snakefile```
+Once the samplesheet has been filled out, building the configuration file is simply executing the `tsv2yaml.sh` script in the same directory as `sampleSheet.tsv`. 
 
-The above command will execute five instances of the snakefile in parallel. It is important to remember how many threads have been specified, as jobs $\times$ threads == total threads used. For example, running 5 jobs in parallel with 10 threads each is 50 threads in total.
+```
+$ ./tsv2yaml.sh sampleSheet.tsv
+```
 
-It is also possible to adjust the number of cores used for each job using the `--core` argument:
+This will make the configuration file which will appear in the same directory as where `tsv2yaml.sh` was executed. 
+The next step is to edit the file to include your specific file paths/data files you'll need. An example of the configuration file is shown below.
 
-```snakemake --core 10 -s snakefile```
+```
+THREADS: 8
+BASE: '/fast/users/a1234567/snakemake/full_pipeline'
+RAW_FILE_PATH: '/fast/users/a1234567/snakemake/fastq'
+FASTQC: '/0_FastQC'
+QC_raw: '/FastQC_raw'
+QC_trim: '/FastQC_trim'
+...
+TRAN: '/data/biohub/Refs/zebrafish/Danio_rerio.GRCz10.cdna.all.fa'
+GTF: '/data/biohub/Refs/zebrafish/Danio_rerio.GRCz10.88.gtf'
+...
+SampleList:
+  Sample_1_A:
+    Sample: 'Sample_1_A'
+    RG_SM: 'smp1_A'
+    RG_ID: 'NB501008.4'
+    RG_PU: 'NB501008HYV7VBGXY.4'
+    RG_PL: 'ILLUMINA'
+    RG_LB: 'made_up_LB'
+    R1: '/fast/users/a1234567/snakemake/fastq/Sample_1_A_R1.fastq.gz'
+    R2: '/fast/users/a1234567/snakemake/fastq/Sample_1_A_R2.fastq.gz'
+```
 
-By specifying `--core`, thread values set throughout the snakefile (either hard coded or specified from a config file) will now be set to 10 threads. This is a global alteration and will be applied to all jobs!
+When editing the configuration file, it is important not to change any of the indentation or syntax as this will affect how the information is read, likely resulting in a keyerror. 
 
-##### _Running a specific rule_
+## Editing the Phoenix batch script
 
-Snakemake will identify whether a rule needs to be re-run, such as when the input files are newer than the output files or a new output file is ammended into in the snakefile. However, just altering rule parameters is not enough to trigger a re-run of a rule. This is because snakemake only looks to see if the target files are there, not which parameters those files were made under.
+There is a template Phoenix batch script in the GitHub repository called `phoenix_snakemake.sh`. This is like any other batch script that you use to submit a job to phoenix. A breakdown of the script is below.
 
-To manually re-run a rule, use the `-R` argument followed by the rule name:
+#### Job parameters
 
-```snakemake -s snakemake -R madeUpRule```
+```
+#!/bin/bash
+#SBATCH -p batch
+#SBATCH -N 1
+#SBATCH -n 16
+#SBATCH --time=2:00:00
+#SBATCH --mem=64GB
+#SBATCH -o /fast/users/a1645424/snakemake/test_output/slurm/full_pipeline_%j.out
+#SBATCH -e /fast/users/a1645424/snakemake/test_output/slurm/full_pipeline_%j.err
+#SBATCH --mail-type=END
+#SBATCH --mail-type=FAIL
+#SBATCH --mail-user=alastair.ludington@adelaide.edu.au
+```
 
-The code above will force the re-execution of the rule `madeUpRule`, generating new output.
+The first section is the job parameters, which tell Phoenix how many resources your job requires. If you are familiar with submitting jobs to Phoenix, you can edit this section to look however you like.
+It's important that the number of threads specified in the batch script matches or exceeds those specified in the configuration file. If fewer threads are specified in the batch script, snakemake will account for this by using fewer threads, however the job will then be less efficient.
+It's also important to allocate memory based on the most memory intensive task in the pipeline (likely the STAR indexing phase).
+Hardset memory and CPU limits are a little rigid, as not all jobs are going to need the same resources. A SLURM configuration file is is in the works, which will be capable of allocating memory and CPU requirements based on the specific rule.
 
-<br>
+#### Modules 
 
-There are many more snakemake executables which you can read about [here](https://snakemake.readthedocs.io/en/latest/executable.html) or by running `snakemake -h` at the command line.
+```
+module load Python/3.6.1-foss-2016b
+module load AdapterRemoval/2.2.1-foss-2016b
+module load fastqc/0.11.4
+module load Subread/1.5.2-foss-2016b
+module load StringTie/1.3.3-foss-2017a
+module load Salmon/0.8.2
+module load STAR/2.5.3a-foss-2016b
+module load sambamba/0.6.6-foss-2016b
+module load picard/2.2.4-Java-1.8.0_121
+module load kallisto/0.43.1-foss-2017a
+module load SAMtools/1.3.1-foss-2016b
+```
 
-### __Contributing__
+Currently, the snakemake pipeline utilises the module system on Phoenix. The order of the modules is important, as loading multiple modules can result in software conflicts that affect the operation of loaded tools. 
 
-If you want to edit your own version of the snakemake pipeline, fork your own branch and go ham! The master branch will be updated with improved software as necessary, however a stable (or stable as you can get) version will always be maintained in this repo.
+#### The snakemake executable 
 
+```
+source /fast/users/a1645424/snakemake/py_snakemake/bin/activate
+snakemake -R --cores 8 -s /fast/users/a1645424/snakemake/scripts/snakefile.py
+deactivate
+```
 
-### __Sections under development__
+The source command activates the PVE that we generated above. Ensure that the path to the `activate` executable is correct, otherwise it will throw an error message. 
+The snakemake command is next. Here, users can take liberty in how they want to execute the pipeline. A basic command has been included, which will simply execute the whole pipeline. Be sure to change the number of cores to a value that matches your config/allocated resources, and check the file path to the snakefile is correct (see note on cores/threads below). 
+If users want to only run a specific rule, or perform a dry run (i.e. check that all the dependencies between rules are valid without actually executing the code), then it is simply a matter of editing this snakemake command. Check out the [snakemake documentation](http://snakemake.readthedocs.io/en/latest/executable.html) for executable options.
+Finally, the `deactivate` command is closing the PVE after the snakemake pipeline has been run.
 
-Currently the STAR and readGroup rules have not been finalised.
+**NOTE:** 
+The number of `--cores` and `--threads` mean sligtly different things. The number of `--cores` represents the total number of physical cores accessible by the pipeline. The number of `--threads` represents the number of threads dedicated to each job in the pipeline. 
+For example, if you have four samples and want to run them all in parallel for a specific job (ensuring you have the memory overhead to do so), you could specify `--cores 16` and `--threads 4`. 
+The main point is that the number of cores is the ultimate limiting factor. Snakemake will not run two samples in parallel for a job if the parallel thread count exceeds the specified cores count. 
 
+## Submitting the pipeline to Phoenix
 
-### Credits
+Once you've edited the `phoneix_snakemake.sh` script, you can submit the job to Phoenix using the command below 
 
-Alastair Ludington
-- email: alastair.ludington@adelaide.edu.au
+`$ sbatch phoenix_snakemake.sh`
 
-Jimmy Breen
-- email: jimmy.breen@adelaide.edu.au
+This will submit the job, giving you a job ID. You can then check the progress of the job using the following command:
+
+`$ squeue -u a1234567`
+
+If the pipeline fails, you can check what went wrong by checking the standard out and/or standard error files that we generated using the...
+
+```
+#SBATCH -o /.../.../full_pipeline_%j.out
+#SBATCH -e /.../.../full_pipeline_%j.err
+``` 
+
+commands at the beginning of the batch script.
+
+## Running specific rules
+
+If you only want to run a specific rule/set of rules, there are a couple of ways to achieve this. The method I find most easy is to edit the `rule all` in the `snakefile.py`. The rule all dictates what actually needs to be run to generate the specified output files. If you only wanted to run FastQC, then you could specify only FastQC at the rule all like so:
+
+```
+QC_raw = config["BASE"] + config["FASTQC"] + config["QC_raw"]
+QC_trim = config["BASE"] + config["FASTQC"] + config["QC_trim"]
+rule all:
+    input:
+        QC_raw, QC_trim
+```
+
+In this example, the output of FastQC has been assinged to variables `QC_raw` and `QC_trim` to tidy the code. I find this method intuitive and simple as you are literally controlling what the pipeline generates. After editing the `snakefile.py`, execute the pipeline in the exact same was as shown above. <br>
+
+A alternative method is to list the rules at the command line interface (i.e. edit the `snakemake -s /.../snakefile.py...etc` command in the `phoenix_snakemake.sh` script) that you want to re-run or only run. 
+This could look something like the following if you wanted to re-run a specific rule...
+
+```
+snakemake -s snakemake.py -R rule_name_here
+```
+
+## Improvements/In development
+
+- Report generation after FastQC and after sequence alignment
+    - The code is there to generate the reports, the issue lies with rpy2 and the version of R it was compiled with.
+- SLURM configuration file 
+    - Simple YAML file that has a default resource configuration, as well as job specific resource configurations.
+    - This will submit all samples for a specific snakemake job to phoenix in parallel (i.e. all samples will have their own Phoenix instance, resources etc...)
+
+## Acknowledgements 
+
+- The University of Adelaide Bioinformatics Hub: [GitHub Repo](https://github.com/UofABioinformaticsHub)
+- Alastair Ludington: alastair.ludington@adelaide.edu.au
+- Jimmy Breen: jimmy.breen@adelaide.edu.au
+- Stephen Pederson: stephen.pederson@adelaide.edu.au
