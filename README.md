@@ -61,12 +61,11 @@ In the GitHub repository, there is a template samplesheet file called `sampleshe
 Much of how to generate the IDs for the readgroups is explained in detail at the [following link](https://gatkforums.broadinstitute.org/gatk/discussion/6472/read-groups).
 An example `sampleSheet.tsv` with three paired-end samples is presented below.
 
-**FILENAME**|**RG\_SM**|**RG\_ID**|**RG\_PU**|**RG\_PL**|**RG\_LB**|**R1\_extension**|**R2\_extension**|**PATH**
-
-:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:|:-----:
-sample1\_filename|N9001|NB501008.4|NB501008HYV7VBGXY.4|ILLUMINA|made\_up\_LB|\_R1.fastq.gz|\_R2.fastq.gz|/fast/users/a1234567/data/fastq/
-sample2\_filename|AX834|NB501008.4|NB501008HYV7VBGXY.4|ILLUMINA|made\_up\_LB|\_R1.fastq.gz|\_R2.fastq.gz|/fast/users/a1234567/data/fastq/
-sample3\_filename|LY610|NB501008.4|NB501008HYV7VBGXY.4|ILLUMINA|made\_up\_LB|\_R1.fastq.gz|\_R2.fastq.gz|/fast/users/a1234567/data/fastq/
+| **FILENAME** | **RG\_SM** | **RG\_ID** | **RG\_PU** | **RG\_PL** | **RG\_LB** | **R1\_extension** | **R2\_extension** | **PATH**|
+:-------------:|:----------:|:----------:|:----------:|:----------:|:----------:|:-----------------:|:-----------------:|:--------:|
+| sample1\_filename | N9001 | NB501008.4 | NB501008HYV7VBGXY.4 | ILLUMINA | made\_up\_LB | \_R1.fastq.gz | \_R2.fastq.gz | /fast/users/a1234567/data/fastq/ |
+| sample2\_filename | AX834 | NB501008.4 | NB501008HYV7VBGXY.4 | ILLUMINA | made\_up\_LB | \_R1.fastq.gz | \_R2.fastq.gz | /fast/users/a1234567/data/fastq/ |
+| sample3\_filename | LY610 | NB501008.4 | NB501008HYV7VBGXY.4 | ILLUMINA | made\_up\_LB | \_R1.fastq.gz | \_R2.fastq.gz | /fast/users/a1234567/data/fastq/ |
 
 ## Building the `YAMl` configuration file
 
